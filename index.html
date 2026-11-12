@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>i love you art</title>
+<style>
+:root{--bg:#fff7f8;--fg:#2a1218;--mut:#8a6a72;--card:#ffffff;--line:#f0d5da;--acc:#e11d48;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14090c;--fg:#fbe9ed;--mut:#b08a93;--card:#1e1014;--line:#3a1f26;--acc:#fb7185}}
+:root[data-theme="dark"]{--bg:#14090c;--fg:#fbe9ed;--mut:#b08a93;--card:#1e1014;--line:#3a1f26;--acc:#fb7185}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 40px}
+h1{margin:0 0 4px;font-size:1.6rem}
+.sub{margin:0 0 18px;color:var(--mut);font-size:.95rem}
+.drop{display:block;border:2px dashed var(--acc);border-radius:16px;padding:28px 16px;text-align:center;cursor:pointer;background:var(--card);font-weight:600}
+.drop.over{background:var(--line)}
+.drop input{display:none}
+.panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.panel label{display:flex;flex-direction:column;gap:6px;font-size:.8rem;color:var(--mut)}
+.panel select,.panel input[type=text]{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px}
+.panel input[type=range]{accent-color:var(--acc)}
+.chk{flex-direction:row!important;align-items:center;gap:8px!important}
+#result,#stage{display:none;width:100%;height:auto;border-radius:12px;border:1px solid var(--line)}
+.btn{font:inherit;font-weight:600;background:var(--acc);color:var(--bg);border:0;border-radius:10px;padding:10px;cursor:pointer;align-self:end}
+.hint{color:var(--mut);font-size:.85rem;text-align:center;margin-top:10px}
+.langs{margin-top:18px;color:var(--mut);font-size:.9rem}.langs summary{cursor:pointer}
+#langList{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#langList span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--fg)}
+</style>
+</head>
+<body>
+<main>
+  <h1>i love you art 💌</h1>
+  <p class="sub">drop any pic, it gets rebuilt out of tiny "i love you" in 21 languages.</p>
+
+  <label class="drop" id="zone">
+    <span id="zt">tap here / drop a pic 📸</span>
+    <input type="file" id="file" accept="image/*">
+  </label>
+
+  <div class="panel">
+    <label>Detail: <b id="colsVal">140</b>
+      <input type="range" id="cols" min="40" max="260" step="10" value="140">
+    </label>
+    <label>Colors
+      <select id="mode"><option value="color">Original colors</option><option value="bw">Black &amp; white</option></select>
+    </label>
+    <label>Background
+      <select id="bg"><option value="dark">Black</option><option value="light">White</option></select>
+    </label>
+    <label>Language
+      <select id="lang"><option value="mix">Mix of 21 languages 🌍</option><option value="custom">Custom text</option></select>
+    </label>
+    <label>Custom text
+      <input type="text" id="txt" value="i love you" maxlength="40" disabled>
+    </label>
+    <label class="chk"><input type="checkbox" id="spaces"> keep spaces (gappy)</label>
+    <label>Animation
+      <select id="anim"><option value="type">Type in (top to bottom)</option><option value="pop">Random pop</option><option value="center">Burst from center</option><option value="rain">Rain down</option></select>
+    </label>
+    <label>Duration: <b id="spdVal">4</b>s
+      <input type="range" id="speed" min="1" max="10" step="1" value="4">
+    </label>
+    <button type="button" class="btn" id="replay">Replay ▶</button>
+  </div>
+
+  <canvas id="stage"></canvas>
+  <img id="result" alt="your pic made of i love you">
+  <p class="hint" id="hint" style="display:none">long-press (phone) or right-click (PC) the pic to save it</p>
+  <details class="langs"><summary>the 21 languages 🌍</summary><div id="langList"></div></details>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const file = $('file'), cols = $('cols'), mode = $('mode'), bg = $('bg'),
+      txt = $('txt'), lang = $('lang'), spaces = $('spaces'), anim = $('anim'), speed = $('speed'),
+      replay = $('replay'), result = $('result'), stage = $('stage'),
+      zone = $('zone'), hint = $('hint');
+const CW = 8, CH = 12;
+const c = stage.getContext('2d');
+let img = null, pending = false, cells = [], raf = 0, colsN = 0, rowsN = 0, bgCol = '#000';
+
+function load(f) {
+  if (!f || !f.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(f);
+  const i = new Image();
+  i.onload = () => { img = i; URL.revokeObjectURL(url); $('zt').textContent = 'tap to change pic 🔁'; schedule(); };
+  i.src = url;
+}
+file.addEventListener('change', e => load(e.target.files[0]));
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('over'); load(e.dataTransfer.files[0]); });
+[cols, mode, bg, txt, spaces, lang].forEach(el => el.addEventListener('input', schedule));
+lang.addEventListener('input', () => { txt.disabled = lang.value !== 'custom'; });
+[anim, speed].forEach(el => el.addEventListener('input', () => { $('spdVal').textContent = speed.value; play(); }));
+replay.addEventListener('click', () => { build(); play(); });
+
+function schedule() {
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => { pending = false; build(); play(); });
+}
+
+const PHRASES = [
+  { n: 'English', t: 'I love you' },
+  { n: 'Spanish', t: 'Te amo' },
+  { n: 'Gujarati', t: 'હું તને પ્રેમ કરું છું' },
+  { n: 'Hindi', t: 'मुझे तुमसे प्यार है' },
+  { n: 'French', t: "Je t'aime" },
+  { n: 'German', t: 'Ich liebe dich' },
+  { n: 'Italian', t: 'Ti amo' },
+  { n: 'Portuguese', t: 'Eu te amo' },
+  { n: 'Japanese', t: '愛してる' },
+  { n: 'Korean', t: '사랑해' },
+  { n: 'Chinese', t: '我爱你' },
+  { n: 'Russian', t: 'Я тебя люблю' },
+  { n: 'Turkish', t: 'Seni seviyorum' },
+  { n: 'Dutch', t: 'Ik hou van jou' },
+  { n: 'Swedish', t: 'Jag älskar dig' },
+  { n: 'Greek', t: 'Σε αγαπώ' },
+  { n: 'Polish', t: 'Kocham cię' },
+  { n: 'Bengali', t: 'আমি তোমাকে ভালোবাসি' },
+  { n: 'Tamil', t: 'நான் உன்னை காதலிக்கிறேன்' },
+  { n: 'Swahili', t: 'Nakupenda' },
+  { n: 'Indonesian', t: 'Aku cinta kamu' }
+];
+$('langList').innerHTML = PHRASES.map(p => '<span>' + p.n + ': ' + p.t + '</span>').join('');
+
+const seg = (window.Intl && Intl.Segmenter) ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+function graphemes(s) {
+  return seg ? Array.from(seg.segment(s), x => x.segment) : Array.from(s);
+}
+
+function makeStream(count) {
+  const out = [];
+  if (lang.value === 'custom') {
+    let t = txt.value || 'i love you';
+    if (!spaces.checked) t = t.replace(/\s+/g, '');
+    const g = graphemes(t || 'iloveyou');
+    while (out.length < count) for (const x of g) out.push(x);
+    return out;
+  }
+  let bag = [];
+  while (out.length < count) {
+    if (!bag.length) {
+      bag = PHRASES.map(p => p.t);
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = bag[i]; bag[i] = bag[j]; bag[j] = tmp;
+      }
+    }
+    let t = bag.pop();
+    if (!spaces.checked) t = t.replace(/\s+/g, '');
+    for (const x of graphemes(t)) out.push(x);
+  }
+  return out;
+}
+
+function build() {
+  if (!img) return;
+  const n = +cols.value;
+  $('colsVal').textContent = n;
+  const rows = Math.max(1, Math.round(n * (img.naturalHeight / img.naturalWidth) * (CW / CH)));
+  colsN = n; rowsN = rows;
+  bgCol = bg.value === 'dark' ? '#000' : '#fff';
+
+  const s = document.createElement('canvas');
+  s.width = n; s.height = rows;
+  const sc = s.getContext('2d', { willReadFrequently: true });
+  sc.fillStyle = bgCol; sc.fillRect(0, 0, n, rows);
+  sc.drawImage(img, 0, 0, n, rows);
+  const d = sc.getImageData(0, 0, n, rows).data;
+
+  stage.width = n * CW; stage.height = rows * CH;
+  c.font = 'bold 12px "Courier New", Courier, monospace';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+
+  const stream = makeStream(n * rows);
+
+  cells = [];
+  let k = 0;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < n; x++) {
+      const o = (y * n + x) * 4;
+      let r = d[o], g = d[o + 1], b = d[o + 2];
+      if (mode.value === 'bw') r = g = b = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      cells.push({ x: x, y: y, ch: stream[k++], col: 'rgb(' + r + ',' + g + ',' + b + ')' });
+    }
+  }
+}
+
+function makeOrder() {
+  const idx = cells.map((_, i) => i);
+  const m = anim.value;
+  if (m === 'pop') {
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = idx[i]; idx[i] = idx[j]; idx[j] = tmp;
+    }
+  } else if (m === 'center') {
+    const cx = colsN / 2, cy = rowsN / 2;
+    const key = cells.map(q => Math.hypot((q.x - cx) * CW, (q.y - cy) * CH));
+    idx.sort((a, b) => key[a] - key[b]);
+  } else if (m === 'rain') {
+    const key = cells.map(q => q.y + Math.random() * rowsN * 0.25);
+    idx.sort((a, b) => key[a] - key[b]);
+  }
+  return idx;
+}
+
+function play() {
+  cancelAnimationFrame(raf);
+  if (!cells.length) return;
+  const order = makeOrder();
+  const total = order.length;
+  const dur = +speed.value * 1000;
+  result.style.display = 'none';
+  stage.style.display = 'block';
+  hint.style.display = 'none';
+  c.fillStyle = bgCol; c.fillRect(0, 0, stage.width, stage.height);
+  let drawn = 0;
+  const t0 = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - t0) / dur);
+    const target = Math.floor(p * total);
+    for (; drawn < target; drawn++) {
+      const q = cells[order[drawn]];
+      c.fillStyle = q.col;
+      c.fillText(q.ch, q.x * CW + CW / 2, q.y * CH + CH / 2, CW + 3);
+    }
+    if (p < 1) { raf = requestAnimationFrame(step); return; }
+    for (; drawn < total; drawn++) {
+      const q = cells[order[drawn]];
+      c.fillStyle = q.col;
+      c.fillText(q.ch, q.x * CW + CW / 2, q.y * CH + CH / 2, CW + 3);
+    }
+    result.src = stage.toDataURL('image/png');
+    result.style.display = 'block';
+    stage.style.display = 'none';
+    hint.style.display = 'block';
+  };
+  raf = requestAnimationFrame(step);
+}
+</script>
+</body>
+</html>
